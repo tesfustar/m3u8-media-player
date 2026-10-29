@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Player</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    video {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      object-fit: contain;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+  <script>
+    (function () {
+      var video = document.getElementById('video');
+      var params = new URLSearchParams(location.search);
+      var src = params.get('url') || params.get('src') || params.get('m3u8');
+
+      if (!src) {
+        console.warn('No stream given. Use ?url=<m3u8 link>');
+        return;
+      }
+
+      // Browsers block autoplay with sound; fall back to muted and unmute on first interaction.
+      function play() {
+        var p = video.play();
+        if (p && p.catch) {
+          p.catch(function () {
+            video.muted = true;
+            video.play().catch(function () {});
+          });
+        }
+      }
+
+      function onInteract() {
+        video.muted = false;
+        play();
+        var el = document.documentElement;
+        var req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
+          try { req.call(el); } catch (e) {}
+        }
+      }
+      document.addEventListener('click', onInteract);
+      document.addEventListener('touchend', onInteract);
+      document.addEventListener('keydown', onInteract);
+
+      if (window.Hls && Hls.isSupported()) {
+        var hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, play);
+        hls.on(Hls.Events.ERROR, function (_, data) {
+          if (!data.fatal) return;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            setTimeout(function () { hls.startLoad(); }, 2000);
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            console.error('Fatal HLS error', data);
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari / iOS native HLS
+        video.src = src;
+        video.addEventListener('loadedmetadata', play);
+      } else {
+        console.error('HLS is not supported in this browser');
+      }
+    })();
+  </script>
+</body>
+</html>
